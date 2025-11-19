@@ -1,71 +1,94 @@
+import { useEffect, useMemo, useState } from 'react'
+import Navbar from './components/Navbar'
+import Hero from './components/Hero'
+import ProductCard from './components/ProductCard'
+import CartDrawer from './components/CartDrawer'
+import { fetchJSON } from './lib/api'
+
 function App() {
+  const [products, setProducts] = useState([])
+  const [cartOpen, setCartOpen] = useState(false)
+  const [cart, setCart] = useState([]) // {id, name, price_cents, image, quantity}
+  const [loading, setLoading] = useState(true)
+  const [checkingOut, setCheckingOut] = useState(false)
+  const [orderInfo, setOrderInfo] = useState(null)
+
+  useEffect(() => {
+    const run = async () => {
+      setLoading(true)
+      // seed once then fetch
+      try {
+        await fetchJSON('/api/seed', { method: 'POST', body: JSON.stringify({ force: false }) })
+      } catch (_) {}
+      const data = await fetchJSON('/api/products')
+      setProducts(data)
+      setLoading(false)
+    }
+    run()
+  }, [])
+
+  const cartCount = useMemo(() => cart.reduce((s, i) => s + i.quantity, 0), [cart])
+
+  const addToCart = (p) => {
+    setCart((prev) => {
+      const exist = prev.find((i) => i.id === p.id)
+      if (exist) return prev.map((i) => i.id === p.id ? { ...i, quantity: i.quantity + 1 } : i)
+      return [...prev, { id: p.id, name: p.name, price_cents: p.price_cents, image: p.image, quantity: 1 }]
+    })
+    setCartOpen(true)
+  }
+
+  const checkout = async () => {
+    setCheckingOut(true)
+    try {
+      const items = cart.map((i) => ({ product_id: i.id, quantity: i.quantity }))
+      const res = await fetchJSON('/api/checkout', { method: 'POST', body: JSON.stringify({ items }) })
+      setOrderInfo(res)
+      // mock confirm immediately
+      const confirm = await fetchJSON('/api/confirm-payment', { method: 'POST', body: JSON.stringify({ order_id: res.order_id, client_secret: res.client_secret, success: true }) })
+      if (confirm.status === 'paid') {
+        setCart([])
+        alert('Payment successful! Your order is confirmed.')
+        setCartOpen(false)
+      }
+    } catch (e) {
+      alert('Checkout failed: ' + e.message)
+    } finally {
+      setCheckingOut(false)
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      {/* Subtle pattern overlay */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.05),transparent_50%)]"></div>
-
-      <div className="relative min-h-screen flex items-center justify-center p-8">
-        <div className="max-w-2xl w-full">
-          {/* Header with Flames icon */}
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center justify-center mb-6">
-              <img
-                src="/flame-icon.svg"
-                alt="Flames"
-                className="w-24 h-24 drop-shadow-[0_0_25px_rgba(59,130,246,0.5)]"
-              />
+    <div className="min-h-screen bg-[#faf7f2] text-gray-900">
+      <Navbar cartCount={cartCount} onCartClick={() => setCartOpen(true)} />
+      <main>
+        <Hero />
+        <section id="collections" className="py-12">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-serif text-3xl">Signature Collections</h2>
             </div>
-
-            <h1 className="text-5xl font-bold text-white mb-4 tracking-tight">
-              Flames Blue
-            </h1>
-
-            <p className="text-xl text-blue-200 mb-6">
-              Build applications through conversation
-            </p>
+            {loading ? (
+              <p className="text-gray-600">Loading products…</p>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {products.map((p) => (
+                  <ProductCard key={p.id} product={p} onAdd={addToCart} />
+                ))}
+              </div>
+            )}
           </div>
+        </section>
 
-          {/* Instructions */}
-          <div className="bg-slate-800/50 backdrop-blur-sm border border-blue-500/20 rounded-2xl p-8 shadow-xl mb-6">
-            <div className="flex items-start gap-4 mb-6">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                1
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Describe your idea</h3>
-                <p className="text-blue-200/80 text-sm">Use the chat panel on the left to tell the AI what you want to build</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4 mb-6">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                2
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Watch it build</h3>
-                <p className="text-blue-200/80 text-sm">Your app will appear in this preview as the AI generates the code</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                3
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Refine and iterate</h3>
-                <p className="text-blue-200/80 text-sm">Continue the conversation to add features and make changes</p>
-              </div>
-            </div>
+        <section id="about" className="py-16 border-t border-black/5">
+          <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+            <h3 className="font-serif text-2xl mb-3">Our Craft</h3>
+            <p className="text-gray-600">Every piece is tempered, filled, and polished by hand. We source single-origin beans and pair them with seasonal inclusions. Our atelier produces limited runs to ensure absolute freshness.</p>
           </div>
+        </section>
+      </main>
 
-          {/* Footer */}
-          <div className="text-center">
-            <p className="text-sm text-blue-300/60">
-              No coding required • Just describe what you want
-            </p>
-          </div>
-        </div>
-      </div>
+      <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} items={cart} onCheckout={checkout} updating={checkingOut} />
     </div>
   )
 }
